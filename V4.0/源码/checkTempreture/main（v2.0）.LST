@@ -1,0 +1,266 @@
+C51 COMPILER V9.01   MAIN（V2_0）                                                          12/09/2018 21:08:08 PAGE 1   
+
+
+C51 COMPILER V9.01, COMPILATION OF MODULE MAIN（V2_0）
+OBJECT MODULE PLACED IN main（v2.0）.OBJ
+COMPILER INVOKED BY: E:\keil_class\C51\BIN\C51.EXE main（v2.0）.c BROWSE DEBUG OBJECTEXTEND TABS(2)
+
+line level    source
+
+   1          
+   2          // 显示温控标准后闪烁、显示当前温度后闪烁、睡眠1秒
+   3          
+   4          
+   5          #define MAIN_Fosc   22118400L //定义主时钟
+   6          
+   7          #include "STC15Fxxxx.H"
+   8          #include "Display.H"
+   9          #include "SERIAL.H"
+  10          #include "KEY.H"
+  11          #include "WIFI.H"
+  12          
+  13          
+  14          
+  15          
+  16          /********************** 主函数 ************************/
+  17          void main(void)
+  18          {
+  19   1        u8  i;
+  20   1        u8 send_buffer[2]; //发送缓冲
+  21   1        u8 remoteKeyCode = 0;//记录键码
+  22   1        
+  23   1        
+  24   1        //所有变量声明都要在函数调用前面
+  25   1        
+  26   1        //串口初始化，使用time1作为波特率
+  27   1        display_init();
+  28   1        key_init();
+  29   1        serial_init();  
+  30   1      
+  31   1        
+  32   1        esp8266_init();
+  33   1        
+  34   1        
+  35   1        while(1)
+  36   1        {
+  37   2          
+  38   2          
+  39   2          //----------------按键扫描模块------------------//
+  40   2          //----------------通信模块------------------------//
+  41   2          if((TX1_Cnt != RX1_Cnt) && (!B_TX1_Busy))  //接受到通信
+  42   2              {
+  43   3                  //RX1_Buffer 接受数据缓冲
+  44   3                  //收到数据，并将数据中的键码赋给变量remoteKeyCode
+  45   3                  remoteKeyCode = RX1_Buffer[TX1_Cnt];
+  46   3                  if(++TX1_Cnt >= UART1_BUF_LENGTH)   TX1_Cnt = 0;  //UART1-BUF-LENGTH == 32
+  47   3              }
+  48   2          
+  49   2          //----------------显示模块---------------------//
+  50   2              
+  51   2          //SleepDelay = 0;   
+  52   2              
+  53   2          if(B_1ms){
+  54   3      
+  55   3            B_1ms = 0;
+C51 COMPILER V9.01   MAIN（V2_0）                                                          12/09/2018 21:08:08 PAGE 2   
+
+  56   3            
+  57   3            if(++cnt50ms >= 50) //50ms扫描一次行列键盘，判断是否有输入
+  58   3            {
+  59   4              cnt50ms = 0;
+  60   4              IO_KeyScan();
+  61   4            }
+  62   3            
+  63   3            //-----------发送方-----------//
+  64   3            if(KeyCode != 0) //keyCode不等于零，即有按键被按下，需要发送一个指令出去
+  65   3            {
+  66   4              send_buffer[0] = KeyCode;
+  67   4              send_buffer[1] = 0;
+  68   4              PrintString1(send_buffer);
+  69   4              KeyCode = 0;
+  70   4            }
+  71   3            
+  72   3            //------------接收方----------//
+  73   3            if(remoteKeyCode != 0) //接收方接受到有键按下
+  74   3            {
+  75   4              if(if_change == 0){
+  76   5                //键位17给小时++
+  77   5                if(remoteKeyCode == 17){
+  78   6                  hour++;
+  79   6                  if(hour >= 24) hour = 0;
+  80   6                }
+  81   5                //键位18给小时--
+  82   5                if(remoteKeyCode == 18){
+  83   6                  hour--;
+  84   6                  if(hour < 0) hour = 23;
+  85   6                }
+  86   5                //键位19给分钟++
+  87   5                if(remoteKeyCode == 19){
+  88   6                  min++;
+  89   6                  if(min >= 60){
+  90   7                    min = 0;
+  91   7                    hour++;
+  92   7                    if(hour >= 24) hour = 0;
+  93   7                  }
+  94   6                }
+  95   5                //键位20给分钟--
+  96   5                if(remoteKeyCode == 20){
+  97   6                  min--;
+  98   6                  if(min < 0){
+  99   7                    min = 59;
+ 100   7                    hour--;
+ 101   7                    if(hour < 0) hour = 23;
+ 102   7                  }
+ 103   6                }
+ 104   5                //键位21，将日期重置
+ 105   5                if(remoteKeyCode == 21){
+ 106   6                  hour = 12;
+ 107   6                  min = 0;
+ 108   6                  sec = 0;
+ 109   6                }
+ 110   5              }
+ 111   4              
+ 112   4              //键位24(第二排最后一个），停止切换模式并且时钟倒计时停止
+ 113   4              if(remoteKeyCode == 24){
+ 114   5                if_change = 0;
+ 115   5              }
+ 116   4              //键位28（第三排最后一个），开始切换模式，此时不能调整倒计时
+ 117   4              if(remoteKeyCode == 28){
+C51 COMPILER V9.01   MAIN（V2_0）                                                          12/09/2018 21:08:08 PAGE 3   
+
+ 118   5                if_change = 1;
+ 119   5              }
+ 120   4              DisplayClock();
+ 121   4              remoteKeyCode = 0;
+ 122   4            }
+ 123   3            
+ 124   3            
+ 125   3            
+ 126   3            if(++msecond >= 1000) //1秒到
+ 127   3            {
+ 128   4              //倒计时
+ 129   4              if(if_change){
+ 130   5                if(hour == 0 && min == 0 && sec == 0){
+ 131   6                  run_light();
+ 132   6                }
+ 133   5                else if(sec > 0){
+ 134   6                  sec--;
+ 135   6                }
+ 136   5                else{
+ 137   6                  sec = 59;
+ 138   6                  if(min > 0){
+ 139   7                    min--;
+ 140   7                  }
+ 141   6                  else{
+ 142   7                    hour--;
+ 143   7                    min = 59;
+ 144   7                  }
+ 145   6                }
+ 146   5              }
+ 147   4      
+ 148   4              
+ 149   4              msecond = 0;    //清1000ms计数
+ 150   4              for(i=0; i<8; i++)  LED8[i] = DIS_BLACK;
+ 151   4              
+ 152   4              //------------------显示部分--------------//
+ 153   4              
+ 154   4              ++SleepDelay;
+ 155   4              if(if_change && SleepDelay % 2 == 0){
+ 156   5              //if(SleepDelay % 2 == 0){
+ 157   5                //设定温度
+ 158   5                LED8[2] = Target_tem % 10;
+ 159   5                LED8[1] = Target_tem % 100 / 10;
+ 160   5                LED8[0] = Target_tem / 100;
+ 161   5                //for(i=0; i<5; i++)  LED8[i] = DIS_BLACK;
+ 162   5                
+ 163   5                //实际温度
+ 164   5      
+ 165   5                //j = Get_ADC10bitResult(2);
+ 166   5                
+ 167   5                j = Get_ADC10bitResult(3);  //参数0~7,查询方式做一次ADC, 返回值就是结果, == 1024 为错误
+ 168   5                j += Get_ADC10bitResult(3);
+ 169   5                j += Get_ADC10bitResult(3);
+ 170   5                j += Get_ADC10bitResult(3);
+ 171   5                
+ 172   5                if(j < 1024*4)
+ 173   5                {
+ 174   6                  j = get_temperature(j); //计算温度值
+ 175   6      
+ 176   6                  if(j >= 400)  F0 = 0, j -= 400;   //温度 >= 0度
+ 177   6                  else      F0 = 1, j  = 400 - j; //温度 <  0度
+ 178   6                  LED8[4] = j / 1000;   //显示温度值
+ 179   6                  LED8[5] = (j % 1000) / 100;
+C51 COMPILER V9.01   MAIN（V2_0）                                                          12/09/2018 21:08:08 PAGE 4   
+
+ 180   6                  LED8[6] = (j % 100) / 10 + DIS_DOT;
+ 181   6                  LED8[7] = j % 10;
+ 182   6                  if(LED8[4] == 0)  LED8[4] = DIS_BLACK;
+ 183   6                  if(F0)  LED8[4] = DIS_;   //显示-
+ 184   6                }
+ 185   5                else  //错误
+ 186   5                {
+ 187   6                  for(i=0; i<8; i++)  LED8[i] = 0;
+ 188   6                }         
+ 189   5              }     
+ 190   4              else{
+ 191   5                if(hour >= 10  && hour <= 23)  LED8[0] = hour / 10;
+ 192   5                else            LED8[0] = DIS_BLACK;
+ 193   5                LED8[1] = hour % 10;
+ 194   5                LED8[2] = DIS_;
+ 195   5                LED8[3] = min / 10;
+ 196   5                LED8[4] = min % 10;
+ 197   5                LED8[6] = sec / 10;
+ 198   5                LED8[7] = sec % 10;
+ 199   5                LED8[5] = DIS_;
+ 200   5              }
+ 201   4              /*
+ 202   4              else if(SleepDelay == 8){ // 关闭显示
+ 203   4                SleepDelay = 0;
+ 204   4      
+ 205   4                P_HC595_SER = 0;
+ 206   4                for(i=0; i<16; i++)   //先关闭显示，省电
+ 207   4                {
+ 208   4                  P_HC595_SRCLK = 1;
+ 209   4                  P_HC595_SRCLK = 0;
+ 210   4                }
+ 211   4                P_HC595_RCLK = 1;
+ 212   4                P_HC595_RCLK = 0;   //锁存输出数据
+ 213   4                
+ 214   4                SetWakeUpTime(500); //0.5秒后醒来
+ 215   4      
+ 216   4                PCON |= 0x02; //Sleep
+ 217   4                _nop_();
+ 218   4                _nop_();
+ 219   4                _nop_();
+ 220   4      
+ 221   4              }
+ 222   4              else{
+ 223   4                for(i = 0;i<8;i++) LED8[i] = i;
+ 224   4              }
+ 225   4              */
+ 226   4            }//1秒
+ 227   3          }
+ 228   2        }
+ 229   1      } 
+ 230          /**********************************************/
+ 231          
+ 232          
+ 233          
+ 234          
+ 235          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   2376    ----
+   CONSTANT SIZE    =    436    ----
+   XDATA SIZE       =   ----    ----
+C51 COMPILER V9.01   MAIN（V2_0）                                                          12/09/2018 21:08:08 PAGE 5   
+
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     78      31
+   IDATA SIZE       =     32    ----
+   BIT SIZE         =      2    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
